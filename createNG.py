@@ -1,58 +1,13 @@
-#!/usr/bin/env python3
-
-########################################################################################
-#
-# Name: createNG
-#  --OMEN training program
-#  --(O)rdered (M)arkov (EN)umerator
-#  -- Generates password guesses based on the conditional probabilty of passwords appearing together
-#
-#  Written by Matt Weir
-#  Backend algorithm based on the work done https://github.com/RUB-SysSec/OMEN
-#  Document describing the approach: https://hal.archives-ouvertes.fr/hal-01112124/file/omen.pdf
-#  
-#
-#  The MIT License (MIT)
-#
-#  Permission is hereby granted, free of charge, to any person obtaining a copy
-#  of this software and associated documentation files (the "Software"), to deal
-#  in the Software without restriction, including without limitation the rights
-#  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-#  copies of the Software, and to permit persons to whom the Software is
-#  furnished to do so, subject to the following conditions:
-#
-#  The above copyright notice and this permission notice shall be included in all
-#  copies or substantial portions of the Software.
-#
-#  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-#  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-#  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-#  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-#  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-#  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-#  SOFTWARE.
-#
-#
-#  Contact Info: cweir@vt.edu
-#
-#  createNG.py
-#
-#########################################################################################
-
-
-##--Including this to print error message if python < 3.0 is used
 from __future__ import print_function
 import sys
-###--Check for python3 and error out if not--##
 if sys.version_info[0] < 3:
     print("This program requires Python 3.x", file=sys.stderr)
     sys.exit(1)
     
 import argparse
-import os  ##--Used for file path information
-import uuid  ##--Used to uniquely identify the ruleset. Used for saving/restaring cracking sessions
+import os
+import uuid
 
-#Custom modules
 from omen_trainer.common_file_io import detect_file_encoding
 from omen_trainer.alphabet_lookup import AlphabetLookup
 from omen_trainer.trainer_file_io import TrainerFileIO
@@ -60,9 +15,21 @@ from omen_trainer.output_file_io import save_rules_to_disk
 from omen_trainer.alphabet_generator import AlphabetGenerator
 
   
-####################################################
-# Parses the command line
-####################################################
+
+def is_password_valid(password, allowed_chars):
+    return all(char in allowed_chars for char in password)
+
+
+firstRow = "`1234567890-="
+firstRowShift = "~!@#$%^&*()_+"
+secondRow = "qwertyuiop[]\\"
+secondRowShift = "QWERTYUIOP{}|"
+thirdRow = "asdfghjkl;'"
+thirdRowShift = "ASDFGHJKL:\""
+fourthRow = "zxcvbnm,./"
+fourthRowShift = "ZXCVBNM<>?"
+allowed_chars = firstRow + firstRowShift + secondRow + secondRowShift + thirdRow + thirdRowShift + fourthRow + fourthRowShift
+
 def parse_command_line(runtime_options):
     parser = argparse.ArgumentParser(description='OMEN Trainer: Creates n-grams for use \
         by the OMEN password guess generator')
@@ -128,54 +95,19 @@ def print_banner(program_details):
     print('',file=sys.stderr)  
 
 
-####################################################################################
-# ASCII art for displaying an error state before quitting
-####################################################################################
-def print_error():
-    print('',file=sys.stderr)
-    print('An error occured, shutting down',file=sys.stderr)
-    print('',file=sys.stderr)
-    print(r' \__/      \__/      \__/      \__/      \__/      \__/          \__/',file=sys.stderr)
-    print(r' (oo)      (o-)      (@@)      (xx)      (--)      (  )          (OO)',file=sys.stderr)
-    print(r'//||\\    //||\\    //||\\    //||\\    //||\\    //||\\        //||\\',file=sys.stderr)
-    print(r'  bug      bug       bug/w     dead      bug       blind      bug after',file=sys.stderr)
-    print(r'         winking   hangover    bug     sleeping    bug     whatever you did',file=sys.stderr)
-    print('',file=sys.stderr)
 
-    
-###################################################################################
-# ASCII art for more generic failure
-###################################################################################
-def ascii_fail():
-    print("                                          __ ",file=sys.stderr)
-    print("                                      _  |  |",file=sys.stderr)
-    print("                  Yye                |_| |--|",file=sys.stderr)
-    print("               .---.  e           AA | | |  |",file=sys.stderr)
-    print("              /.--./\  e        A",file=sys.stderr)
-    print("             // || \/\  e      ",file=sys.stderr)
-    print("            //|/|| |\/\   aa a    |\o/ o/--",file=sys.stderr)
-    print("           ///|\|| | \/\ .       ~o \.'\.o'",file=sys.stderr)
-    print("          //|\|/|| | |\/\ .      /.` \o'",file=sys.stderr)
-    print("         //\|/|\|| | | \/\ ( (  . \o'",file=sys.stderr)
-    print("___ __ _//|/|\|/|| | | |\/`--' '",file=sys.stderr)
-    print("__/__/__//|\|/|\|| | | | `--'",file=sys.stderr)
-    print("|\|/|\|/|\|/|\|/|| | | | |",file=sys.stderr)
-    print("",file=sys.stderr)
-    
-  
-##################################################################
-# Main function
-##################################################################
+
+
+
 def main():
     
     management_vars = {
-        ##--Information about this program--##
         'program_details':{
             'program':'createNG.py',
             'version': '0.1',
-            'author':'Matt Weir',
-            'contact':'cweir@vt.edu',
-            'source':'https://github.com/lakiw/py_omen'
+            'author':'Emelyanov Roman',
+            'contact':'era002@mephi.ru',
+            'source':'https://github.com/romarioxokki'
         },
         ##--Runtime specific values, can be overriden via command line options
         'runtime_options':{
@@ -187,10 +119,78 @@ def main():
             'rule_name':'Default',
             
             #nGram Calculation
-            'ngram':4,
+            'ngram':2,
             'max_level':10,
-            'alphabet':'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!.*@-_$#<?',
-            'learn_alphabet':None,
+            'alphabet': [((0, 0), (-1, 0), (-1, 0), (0, 0)),
+                ((0, 0), (-1, 0), (0, 1)),
+                ((0, 0), (1, 1), (1, 2)),
+                ((0, 0), (1, 1), (2, 0)),
+                ((0, 0), (-1, -1), (-1, 0)),
+                ((0, 0), (-1, 0), (0, 0), (0, 0)),
+                ((0, 0), (0, -1), (1, -1), (1, -1)),
+                ((0, 0), (1, 0), (2, 0), (3, 0), (4, 0)),
+                ((0, 0), (1, 0), (1, 1)),
+                ((0, 0), (1, 0), (1, 0), (0, 0)),
+                ((0, 0), (-1, 0), (0, 0), (-1, 0)),
+                ((0, 0), (-1, 1), (0, 0)),
+                ((0, 0), (1, -1), (1, -1)),
+                ((0, 0), (1, 0), (1, -1)),
+                ((0, 0), (1, 0), (0, 0), (1, 0)),
+                ((0, 0), (0, 0), (1, 0), (1, 0)),
+                ((0, 0), (0, -1), (0, 0)),
+                ((0, 0), (-1, 1), (-1, 0)),
+                ((0, 0), (-1, 1), (-2, 1)),
+                ((0, 0), (0, 1), (1, 0)),
+                ((0, 0), (0, -1), (-1, -1)),
+                ((0, 0), (0, 0), (1, -1)),
+                ((0, 0), (1, -1), (2, -1)),
+                ((0, 0), (1, 0), (2, -1)),
+                ((0, 0), (1, 0), (0, 1)),
+                ((0, 0), (1, -1), (0, 0)),
+                ((0, 0), (-1, -1), (-1, -1)),
+                ((0, 0), (0, 0), (-1, 1)),
+                ((0, 0), (0, -1), (-1, 0)),
+                ((0, 0), (1, 1), (0, 0)),
+                ((0, 0), (-1, 0), (-2, 1)),
+                ((0, 0), (-1, 0), (-1, 1)),
+                ((0, 0), (-1, -1), (-2, -1)),
+                ((0, 0), (1, 0), (0, -1)),
+                ((0, 0), (0, 0), (0, 0), (0, 0)),
+                ((0, 0), (1, 0), (2, 1)),
+                ((0, 0), (0, 0), (-1, -1)),
+                ((0, 0), (1, -1), (0, -1)),
+                ((0, 0), (0, 1), (-1, 0)),
+                ((0, 0), (0, 0), (0, 1)),
+                ((0, 0), (0, 0), (0, -1)),
+                ((0, 0), (0, -1), (0, -1)),
+                ((0, 0), (1, 0), (2, 0), (3, 0)),
+                ((0, 0), (-1, -1), (0, 0)),
+                ((0, 0), (-1, 1), (-1, 1)),
+                ((0, 0), (-1, -1), (0, -1)),
+                ((0, 0), (0, 1), (0, 1)),
+                ((0, 0), (0, -1), (1, -1)),
+                ((0, 0), (0, 1), (0, 0)),
+                ((0, 0), (1, 1), (1, 1)),
+                ((0, 0), (1, 1), (1, 0)),
+                ((0, 0), (0, 0), (-1, 0)),
+                ((0, 0), (-1, 0), (-2, 0)),
+                ((0, 0), (-1, 0), (-1, 0)),
+                ((0, 0), (-1, 0), (0, 0)),
+                ((0, 0), (1, 0), (0, 0)),
+                ((0, 0), (0, 0), (1, 0)),
+                ((0, 0), (1, 0), (1, 0)),
+                ((0, 0), (0, 0), (0, 0)),
+                ((0, 0), (1, 0), (2, 0)),
+                ((0, 0), (0, 1)),
+                ((0, 0), (1, 1)),
+                ((0, 0), (1, -1)),
+                ((0, 0), (-1, 1)),
+                ((0, 0), (-1, -1)),
+                ((0, 0), (0, -1)),
+                ((0, 0), (-1, 0)),
+                ((0, 0), (1, 0)),
+                ((0, 0), (0, 0))],
+            'learn_alphabet': True,
             'smooting':None,
             
             #Options added for this version of OMEN
@@ -218,25 +218,17 @@ def main():
             
         command_line_results['encoding'] = possible_file_encodings[0]
 
-    ##--Learn the alphabet if specified
-    if command_line_results['learn_alphabet'] != None:       
+    # command_line_results['learn_alphabet'] = True
+    if command_line_results['learn_alphabet'] != None:
         print('',file=sys.stderr)
         print('---Starting first pass through training set to learn the alphabet---',file=sys.stderr)
         print('',file=sys.stderr)
-        
+
         ##--Open the training file IO for the first pass to learn the Alphabet
-        try:
-            input_dataset = TrainerFileIO(command_line_results['training_file'], command_line_results['encoding'])
-        ##--Error opening the file for reading
-        except Exception as msg:
-            print (error,file=sys.stderr)
-            print ("Error reading file " + self.filename ,file=sys.stderr)
-            ascii_fail()
-            print("Exiting...")
-            return
+        input_dataset = TrainerFileIO(command_line_results['training_file'], command_line_results['encoding'])
         
         ##--Initialize the alphabet generator
-        ag = AlphabetGenerator(alphabet_size = command_line_results['learn_alphabet'], ngram = command_line_results['ngram'])
+        ag = AlphabetGenerator(ngram = 2)
         
         ##--Now loop through all the passwords to get the character counts for the alphabet
         password = input_dataset.read_password()
@@ -244,15 +236,19 @@ def main():
         while password != None:
             if total_count % 1000000 == 0 and total_count != 0:
                 print(str(total_count//1000000) +' Million', file=sys.stderr)
-            ag.process_password(password)
+            if is_password_valid(password,allowed_chars):
+                ag.process_password(password)
             password = input_dataset.read_password()
-            total_count +=1 
+            total_count +=1
 
-        ##--Now that we are done, sort and return the alphabet
-        command_line_results['alphabet'] = ag.get_alphabet()
-        
-        ##--Saving this only for printing out the location of the alphabet file to console
+        command_line_results['alphabet'] = ag.get_alphabet(total_count)
         alphabet_file = os.path.join(os.path.dirname(os.path.realpath(__file__)),'Rules',command_line_results['rule_name'],'alphabet.txt')
+        file_Alphabet = open(alphabet_file, 'a')
+        print(command_line_results['alphabet'])
+        for pattern in command_line_results['alphabet']:
+
+            file_Alphabet.write(f'{pattern}\n')
+        file_Alphabet.close()
         print("Done learning alphabet", file=sys.stderr)
         print("Displaying learned alphabet to a console usually ends poorly for non-standard characters.", file=sys.stderr)
         print("If you want to review what the alphabet actually is you can view it at: " + alphabet_file, file=sys.stderr)
@@ -265,20 +261,13 @@ def main():
     ##--Initialize lookup tables
     omen_trainer = AlphabetLookup(
         alphabet = command_line_results['alphabet'], 
-        ngram = command_line_results['ngram'],
+        ngram = 2,
         max_length = command_line_results['max_length']
         )
 
     ##--Initialize the trainer file io
-    try:
-        input_dataset = TrainerFileIO(command_line_results['training_file'], command_line_results['encoding']) 
-    ##--Error opening the file for reading
-    except Exception as msg:
-        print (error,file=sys.stderr)
-        print ("Error reading file " + self.filename ,file=sys.stderr)
-        ascii_fail()
-        print("Exiting...")
-        return
+    input_dataset = TrainerFileIO(command_line_results['training_file'], command_line_results['encoding'])
+
     
     print("--Starting to parse passwords--",file=sys.stderr)
     print("Passwords parsed so far (in millions): ", file=sys.stderr)    
@@ -289,17 +278,18 @@ def main():
         ##--Print out status info
         if total_count % 1000000 == 0 and total_count != 0:
             print(str(total_count//1000000) +' Million', file=sys.stderr)
-        omen_trainer.parse(password)
+        if is_password_valid(password, allowed_chars):
+            omen_trainer.parse(password)
         password = input_dataset.read_password()
-        total_count +=1        
-    
-    print()
+        total_count +=1
     print("Done with intial parsing.", file=sys.stderr)
     print("Number of passwords trained on: " + str(total_count), file=sys.stderr)
     print("Number of file encoding errors = " + str(input_dataset.num_encoding_errors), file=sys.stderr)
     print()
     print("--Applying probability smoothing--", file=sys.stderr)
-
+    # for key,value in omen_trainer.grammar.items():
+    #     print(key,value)
+    # raise Exception(omen_trainer.grammar.items())
     omen_trainer.apply_smoothing()
     
     print("--Saving Results--", file=sys.stderr)

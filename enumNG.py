@@ -1,68 +1,107 @@
-#!/usr/bin/env python3
 
-########################################################################################
-#
-# Name: enumNG
-#  --OMEN guess generation program
-#  --(O)rdered (M)arkov (EN)umerator
-#  -- Generates password guesses based on the conditional probabilty of passwords appearing together
-#
-#  Written by Matt Weir
-#  Backend algorithm based on the work done https://github.com/RUB-SysSec/OMEN
-#  Document describing the approach: https://hal.archives-ouvertes.fr/hal-01112124/file/omen.pdf
-#  An even better document describing this: http://mobsec.rub.de/media/mobsec/arbeiten/2014/12/12/2013-ma-angelstorf-omen.pdf
-#  
-#
-#  The MIT License (MIT)
-#
-#  Permission is hereby granted, free of charge, to any person obtaining a copy
-#  of this software and associated documentation files (the "Software"), to deal
-#  in the Software without restriction, including without limitation the rights
-#  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-#  copies of the Software, and to permit persons to whom the Software is
-#  furnished to do so, subject to the following conditions:
-#
-#  The above copyright notice and this permission notice shall be included in all
-#  copies or substantial portions of the Software.
-#
-#  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-#  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-#  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-#  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-#  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-#  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-#  SOFTWARE.
-#
-#
-#  Contact Info: cweir@vt.edu
-#
-#  enumNG.py
-#
-#########################################################################################
-
-
-##--Including this to print error message if python < 3.0 is used
 from __future__ import print_function
 import sys
-###--Check for python3 and error out if not--##
+
+
 if sys.version_info[0] < 3:
     print("This program requires Python 3.x", file=sys.stderr)
     sys.exit(1)
     
 import argparse
-import os  ##--Used for file path information
+import os
 import configparser
 
-import time ##--Used for testing
+import time
 
-#Custom modules
 from omen_cracker.input_file_io import load_rules
 from omen_cracker.markov_cracker import MarkovCracker
 from omen_cracker.optimizer import Optimizer
-  
-####################################################
-# Parses the command line
-####################################################
+import  math
+
+
+
+def dist(p1, p2):
+    return math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+
+
+def write_passwords_to_file(passwords, filename):
+    with open(filename, 'a') as f:
+        for password in passwords:
+            f.write(''.join(''.join(part) for part in password) + '\n')
+
+
+from itertools import product
+
+
+from itertools import product
+
+def generate_possible_sequences(sequence, keyboard_dict, keyboard_shift_dict):
+    possible_sequences = []
+    for sub_sequence in sequence:
+        sub_sequences_list = []  # Список для хранения последовательностей символов для текущей подпоследовательности
+        for x in range(0, 12):
+            for y in range(0, 4):
+                cur_pattern = increase_coordinates(sub_sequence, x, y)
+                sub_sequence_combinations = []
+                for press in cur_pattern:
+                    possible_presses = []
+                    if press in keyboard_dict:
+                        possible_presses.append(keyboard_dict[press])
+                    if press in keyboard_shift_dict:
+                        possible_presses.append(keyboard_shift_dict[press])
+                    sub_sequence_combinations.append(possible_presses)
+                # Генерируем все возможные комбинации символов для текущей подпоследовательности
+                combinations = [''.join(combination) for combination in product(*sub_sequence_combinations)]
+                sub_sequences_list.extend(combinations)
+        possible_sequences.append(sub_sequences_list)  # Добавляем список возможных последовательностей символов для текущей подпоследовательности
+    return possible_sequences
+
+
+def generate_passwords(subsequences_list, keyboard_dict):
+    passwords = []  # Список для хранения всех возможных паролей
+    n = len(subsequences_list)  # Количество частей пароля
+
+    # Рекурсивная функция для построения всех возможных паролей
+    def build_passwords(password, idx):
+        # Если пароль содержит все части, добавляем его в список паролей
+        if len(password) == n:
+            passwords.append(password)
+            return
+
+        for subsequence in subsequences_list[idx]:
+            # Проверяем расстояние между концом предыдущей части и началом текущей части
+            if len(password) == 0 or dist(keyboard_dict[password[-1][-1]], keyboard_dict[subsequence[0]]) >= 0:
+                # Рекурсивно строим пароль с добавлением текущей части
+                build_passwords(password + [subsequence], idx + 1)
+
+    # Начинаем построение паролей с первой части
+    build_passwords([], 0)
+
+    return passwords
+
+def generate_combinations(list_of_lists):
+    return [''.join(combination) for combination in product(*list_of_lists)]
+# Функция для увеличения координат точек
+def increase_coordinates(sub_sequence, dx, dy):
+    return [(x + dx, y + dy) for x, y in sub_sequence]
+
+
+def list_sequence_to_characters(sequence_list, keyboard_dict):
+    characters = []
+    for press in sequence_list:
+        if press in keyboard_dict:
+            characters.append(keyboard_dict[press])
+        else:
+            characters.append(press)
+    return characters
+
+
+def get_possible_characters(point, keyboard_dict, keyboard_shift_dict):
+    if point in keyboard_dict and point in keyboard_shift_dict:
+        return [keyboard_dict[point], keyboard_shift_dict[point]]
+    else:
+        return None
+
 def parse_command_line(runtime_options):
     parser = argparse.ArgumentParser(description='OMEN Guess Generator: Creates password guesses')
     
@@ -88,8 +127,7 @@ def parse_command_line(runtime_options):
     
     try:
         args=parser.parse_args()
-        
-        ##Ruleset Name
+
         runtime_options['rule_name'] = args.rule
         runtime_options['debug'] = args.debug
         runtime_options['test'] = args.test
@@ -105,10 +143,7 @@ def parse_command_line(runtime_options):
 
     return True 
 
-    
-###################################################################################
-# Prints the startup banner when this tool is run
-###################################################################################
+
 def print_banner(program_details):
     print('',file=sys.stderr)
     print (program_details['program'] + " Version " + program_details['version'], file=sys.stderr)
@@ -118,102 +153,58 @@ def print_banner(program_details):
     print('',file=sys.stderr)  
 
 
-####################################################################################
-# ASCII art for displaying an error state before quitting
-####################################################################################
-def print_error():
-    print('',file=sys.stderr)
-    print('An error occured, shutting down',file=sys.stderr)
-    print('',file=sys.stderr)
-    print(r' \__/      \__/      \__/      \__/      \__/      \__/          \__/',file=sys.stderr)
-    print(r' (oo)      (o-)      (@@)      (xx)      (--)      (  )          (OO)',file=sys.stderr)
-    print(r'//||\\    //||\\    //||\\    //||\\    //||\\    //||\\        //||\\',file=sys.stderr)
-    print(r'  bug      bug       bug/w     dead      bug       blind      bug after',file=sys.stderr)
-    print(r'         winking   hangover    bug     sleeping    bug     whatever you did',file=sys.stderr)
-    print('',file=sys.stderr)
 
     
-###################################################################################
-# ASCII art for more generic failure
-###################################################################################
-def ascii_fail():
-    print("                                          __ ",file=sys.stderr)
-    print("                                      _  |  |",file=sys.stderr)
-    print("                  Yye                |_| |--|",file=sys.stderr)
-    print("               .---.  e           AA | | |  |",file=sys.stderr)
-    print("              /.--./\  e        A",file=sys.stderr)
-    print("             // || \/\  e      ",file=sys.stderr)
-    print("            //|/|| |\/\   aa a    |\o/ o/--",file=sys.stderr)
-    print("           ///|\|| | \/\ .       ~o \.'\.o'",file=sys.stderr)
-    print("          //|\|/|| | |\/\ .      /.` \o'",file=sys.stderr)
-    print("         //\|/|\|| | | \/\ ( (  . \o'",file=sys.stderr)
-    print("___ __ _//|/|\|/|| | | |\/`--' '",file=sys.stderr)
-    print("__/__/__//|\|/|\|| | | | `--'",file=sys.stderr)
-    print("|\|/|\|/|\|/|\|/|| | | | |",file=sys.stderr)
-    print("",file=sys.stderr)
-    
-  
-##################################################################
-# Main function
-##################################################################
+
+
 def main():
     
     management_vars = {
         ##--Information about this program--##
         'program_details':{
             'program':'enumNG.py',
-            'version': '0.1',
-            'author':'Matt Weir',
-            'contact':'cweir@vt.edu',
-            'source':'https://github.com/lakiw/py_omen'
+            'version': '0.2',
+            'author':'Roman Emelyanov',
+            'contact':'era002@mephi.ru',
+            'source':'https://github.com/romarioxokki'
         },
-        ##--Runtime specific values, can be overriden via command line options
+
         'runtime_options':{
- 
-            ##Rule Name
+
             'rule_name':'Default',
-            
-            ##If we are doing debugging by default or not
+
             'debug':False,
-            
-            ##Additional debuging by allowing the user to enter in passwords to be parsed
+
             'test':False,
-            
-            ##Session name for saving/restarting a session
+
             'session_name':'default',
-            
-            ##If we are restoring a session vs starting a new one
+
             'restore':False,
-            
-            ##Maximum number of guesses, if negative ignore
+
             'max_guesses':-1,
 
         }
     }  
-    
-    ##--Print out banner
+
     print_banner(management_vars['program_details'])
-    
-    ##--Parse the command line ---##
+
     command_line_results = management_vars['runtime_options']
     if parse_command_line(command_line_results) != True:
         return
-        
-    ##--Load the RuleSet ---##
+
     absolute_base_directory = os.path.join(
         os.path.dirname(os.path.realpath(__file__)),'Rules',command_line_results['rule_name']
         )
-    
-    ##--Dictionary that will contain the grammar
+
     grammar = {}
-     
-    ##--Actually load the ruleset here
+
     print("loading ruleset: " + command_line_results['rule_name'],file=sys.stderr)
     if not load_rules(absolute_base_directory, grammar, min_version=management_vars['program_details']['version']):
         print("Error reading the ruleset, exiting", file=sys.stderr)
-        ascii_fail()
         return
-    
+
+
+
     ##--Initialize the TMTO optimizer
     optimizer = Optimizer(max_length = 4)
     
@@ -231,20 +222,48 @@ def main():
             )  
     except:
         print("Error loading the save file, exiting", file=sys.stderr)
-        ascii_fail()
         return
-    
-    ##--If there is debugging going on for parsing user supplied strings
+
     if command_line_results['test']:
         while True:
             guess = input("Enter string to parse:")
             cracker.parse_input(guess)
-        
-    ##--Start generating guesses
+
     print("--Starting to generate guesses-- ",file=sys.stderr)
+
+    firstRow = "`1234567890-="
+    firstRowShift = "~!@#$%^&*()_+"
+    secondRow = "qwertyuiop[]\\"
+    secondRowShift = "QWERTYUIOP{}|"
+    thirdRow = "asdfghjkl;'"
+    thirdRowShift = "ASDFGHJKL:\""
+    fourthRow = "zxcvbnm,./"
+    fourthRowShift = "ZXCVBNM<>?"
+    allowed_chars = firstRow + firstRowShift + secondRow + secondRowShift + thirdRow + thirdRowShift + fourthRow + fourthRowShift
+    keyboard = [firstRow, secondRow, thirdRow, fourthRow]
+    keyboardShift = [firstRowShift, secondRowShift, thirdRowShift, fourthRowShift]
+    keyboardDict = {}
+    keyboardShiftDict = {}
+
+    for i in range(0, len(keyboard)):
+        for j in range(0, len(keyboard[i])):
+            if i >= 1:
+                point = (j + 1, i)
+            else:
+                point = (j, i)
+            keyboardDict[keyboard[i][j]] = point
+
+    for i in range(0, len(keyboardShift)):
+        for j in range(0, len(keyboardShift[i])):
+            if i >= 1:
+                point = (j + 1, i)
+            else:
+                point = (j, i)
+            keyboardShiftDict[keyboardShift[i][j]] = point
+    reverse_keyboard_dict = {v: k for k, v in keyboardDict.items()}
+    reverse_keyboard_shift_dict = {v: k for k, v in keyboardShiftDict.items()}
     try:
  
-        start_time = time.clock()
         num_guesses = 0
         
         guess, level = cracker.next_guess()
@@ -252,20 +271,40 @@ def main():
             num_guesses += 1
             if command_line_results['debug']:
                 if num_guesses % 100000 == 0:
-                    elapsed_time = time.clock() - start_time
                     print()
                     print("guesses: " + str(num_guesses))
                     print("level: " + str(level))
-                    print("guesses a second: " + str(num_guesses / elapsed_time))
             else:
-                if num_guesses % 1000000 == 0:
+                if num_guesses % 100000 == 0:
                     cracker.save_session()
-                #guess = guess + '\n'
-                #guess = guess.encode('utf-8')
-                #sys.stdout.buffer.write(guess)
-                #sys.stdout.flush()
-                print(guess)
-                #input("hit enter")
+
+                sub_tuples = []  # Создаем список для хранения подкортежей
+                current_sub_tuple = []  # Создаем список для формирования текущего подкортежа
+
+                # Проходим по каждому элементу в кортеже
+                list_of_lists = []  # Создаем список для хранения списков кортежей
+                current_sub_list = []  # Создаем список для формирования текущего подсписка
+
+                # Проходим по каждому элементу в кортеже
+                for item in guess:
+                    # Если текущий элемент не равен (5, 5), добавляем его к текущему подсписку
+                    if item != (5, 5):
+                        current_sub_list.append(item)
+                    else:
+                        # Если текущий элемент равен (5, 5), добавляем текущий подсписок к списку списков и создаем новый пустой подсписок
+                        list_of_lists.append(current_sub_list)
+                        current_sub_list = []
+
+                # Добавляем последний подсписок к списку списков
+                if current_sub_list:
+                    list_of_lists.append(current_sub_list)
+
+                print(list_of_lists)
+                possible_sequences = generate_possible_sequences(list_of_lists, reverse_keyboard_dict, reverse_keyboard_shift_dict)
+                passwords = generate_combinations(possible_sequences)
+                print(passwords)
+                write_passwords_to_file(passwords, 'all_password.txt')
+
                 
             if command_line_results['max_guesses'] > 0 and num_guesses >= command_line_results['max_guesses']:
                 break

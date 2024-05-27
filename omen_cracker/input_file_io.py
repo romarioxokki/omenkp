@@ -60,16 +60,16 @@ def load_rules(base_directory, grammar, min_version=None):
         _load_alphabet(base_directory, "alphabet.txt", grammar)
         
         ##--Load the IP ngrams
-        _load_ngrams(base_directory, "IP.level", grammar, "ip", grammar['ngram'] - 1)
+        _load_ngrams(base_directory, "IP.level", grammar, "ip", grammar['ngram'])
         
         ##--Load the EP ngrams
-        _load_ngrams(base_directory, "EP.level", grammar, "ep", grammar['ngram'] - 1)
+        _load_ngrams(base_directory, "EP.level", grammar, "ep", grammar['ngram'])
         
         ##--Load the CP ngrams
-        _load_ngrams(base_directory, "CP.level", grammar, "cp", grammar['ngram'])
+        _load_ngrams(base_directory, "CP.level", grammar, "cp", grammar['ngram']+1)
         
         ##--Load the length info
-        _load_length(base_directory, "LN.level", grammar, "ln", grammar['ngram'])        
+        _load_length(base_directory, "LN.level", grammar, "ln", grammar['ngram']+1)
                 
     except Exception as msg:
         print(msg)
@@ -121,7 +121,9 @@ def _load_alphabet(base_directory, filename, grammar):
         ##--If that problem occurs, it strongly implies something happened during the training phase
         with codecs.open(full_file_path, 'r', encoding= grammar['alphabet_encoding'], errors= 'strict') as file:
             for line in file:
-               grammar['alphabet'].append(line.rstrip('\n\r'))
+               elements = line.strip().split("->")
+               tuples = [tuple(map(int, element.strip("()").split(","))) for element in elements]
+               grammar['alphabet'].append(tuple(tuples))
                
     except IOError as msg:
         print("Could not open the config file for the ruleset specified. The rule directory may not exist", file=sys.stderr)
@@ -158,8 +160,7 @@ def _load_ngrams(base_directory, filename, grammar, name, ngram_size):
             for line in file:
                 line = line.rstrip('\n\r').split('\t')
 
-                ##--If there wasn't a line to read. This indicates an error in the trianing file somewhere
-                if len(line) != 2:
+                if len(line) != ngram_size:
                     print("Error parsing " + full_file_path)
                     print("This indicates there was a problem with the training program or the file was corrupted somehow")
                     raise Exception
@@ -177,22 +178,31 @@ def _load_ngrams(base_directory, filename, grammar, name, ngram_size):
                 
                 ##--For IP--##
                 if name == "ip":
-                    grammar[name][level].append(line[1])
+                    elements = line[1].strip().split("->")
+                    tuples = [tuple(map(int, element.strip("()").split(","))) for element in elements]
+                    grammar[name][level].append(tuple(tuples))
                 
                 ##--For EP--##
                 elif name == "ep":
-                    grammar[name][line[1]] = level
+                    elements = line[1].strip().split("->")
+                    tuples = [tuple(map(int, element.strip("()").split(","))) for element in elements]
+                    grammar[name][tuple(tuples)] = level
                     
                 ##--For CP--##
                 elif name == "cp":
-                    ##--Get all of the characters except the last character
-                    search_string = line[1][0:-1]
+                    elements = line[1].strip().split("->")
+                    tuples = [tuple(map(int, element.strip("()").split(","))) for element in elements]
+                    first = tuple(tuples)
+                    elements_second = line[2].strip().split("->")
+                    tuples_second = [tuple(map(int, element.strip("()").split(","))) for element in elements_second]
+                    second = tuple(tuples_second)
+                    search_string = first
                     if search_string not in grammar[name]:
                         grammar[name][search_string] = {}
                     if level not in grammar[name][search_string]:
                         grammar[name][search_string][level] = []
                         
-                    grammar[name][search_string][level].append(line[1][-1])
+                    grammar[name][search_string][level].append(second)
                 else:
                     print("Hmm that shouldn't happen. Hit an unexpected error with the function to load the rules")
                
@@ -201,7 +211,7 @@ def _load_ngrams(base_directory, filename, grammar, name, ngram_size):
         print("Filename: " + full_file_path, file=sys.stderr)
         raise 
     except ValueError as msg:
-        print("Error reading an item from the file: " + full_file_paht)
+        print("Error reading an item from the file: " + full_file_path)
         print("This indicates there was a problem with the training program or the file was corrupted somehow")
         raise
     except Exception as msg:
@@ -258,6 +268,6 @@ def _load_length(base_directory, filename, grammar, name, min_size):
         print("Filename: " + full_file_path, file=sys.stderr)
         raise 
     except ValueError as msg:
-        print("Error reading an item from the file: " + full_file_paht)
+        print("Error reading an item from the file: " + full_file_path)
         print("This indicates there was a problem with the training program or the file was corrupted somehow")
         raise

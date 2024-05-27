@@ -27,6 +27,54 @@ class MarkovCracker:
     # Initializes the cracker
     # If grammar is none, then the cracker will basically act as a noop
     ############################################################################################
+    def next_guess(self, level=None):
+        if self.cur_guess is None:
+            if level is None:
+                self.increase_target_level = True
+                self.target_level = self.start_length + self.start_ip
+            else:
+                if self.start_length + self.start_ip > level:
+                    return None
+                self.increase_target_level = False
+                self.target_level = level
+
+            self.cur_len = [self.start_length, 0]
+            self.cur_ip = [self.start_ip, 0]
+            self.cur_guess = GuessStructure(
+                max_level=self.max_level,
+                cp=self.grammar['cp'],
+                ip=self.grammar['ip'][self.cur_ip[0]][self.cur_ip[1]],
+                cp_length=self.grammar['ln'][self.cur_len[0]][self.cur_len[1]],
+                target_level=self.target_level - self.cur_len[0] - self.cur_ip[0],
+                optimizer=self.optimizer
+            )
+
+        guess = self.cur_guess.next_guess()
+
+        while guess is None:
+            if not self._increase_ip_for_target(working_target=self.target_level - self.cur_len[0]):
+                if not self._increase_len_for_target():
+                    if self.increase_target_level:
+                        self.target_level += 1
+                        self.cur_len = [self.start_length, 0]
+                        self.cur_ip = [self.start_ip, 0]
+                        self.cur_guess = GuessStructure(
+                            cp=self.grammar['cp'],
+                            max_level=self.max_level,
+                            ip=self.grammar['ip'][self.cur_ip[0]][self.cur_ip[1]],
+                            cp_length=self.grammar['ln'][self.cur_len[0]][self.cur_len[1]],
+                            target_level=self.target_level - self.cur_len[0] - self.cur_ip[0],
+                            optimizer=self.optimizer
+                        )
+                    else:
+                        self.cur_guess = None
+                        return None
+            guess = self.cur_guess.next_guess()
+
+        return guess, self.target_level
+
+
+
     def __init__(self, grammar, version, base_directory, session_name, rule_name, uuid, optimizer = None, restore = False):
         
         ##--Store the ruleset
@@ -162,7 +210,7 @@ class MarkovCracker:
                     else:
                         self.cur_guess = None
                         return None
-            # print(str(self.target_level) + " : " + str(self.cur_len) + " : " + str(self.cur_ip))      
+            # print(str(self.target_level) + " : " + str(self.cur_len) + " : " + str(self.cur_ip))
             guess =  self.cur_guess.next_guess()
             #print("level: " + str(self.target_level) + " length = " + str(self.cur_len) + " ip " + str(self.cur_ip))
             
@@ -290,26 +338,23 @@ class MarkovCracker:
     ####################################################################################################################
     def save_session(self):
         with open(self.full_save_file_path, 'wb') as file:
-            ##--Save the level, rule, and uuid info for sanity checking when starting up again
+            ##--Сохранение информации о версии, правиле и идентификаторе для проверки целостности при запуске
             pickle.dump(self.version, file)
             pickle.dump(self.rule_name, file)
             pickle.dump(self.uuid, file)
-            
-            ##--Save the Markov Cracker variables here
+
+            ##--Сохранение переменных Markov Cracker
             pickle.dump(self.target_level, file)
-            pickle.dump(self.increase_target_level, file)          
+            pickle.dump(self.increase_target_level, file)
             pickle.dump(self.cur_ip, file)
             pickle.dump(self.cur_len, file)
-            
-            ##--Save the guess structure variables here, not saving the full guess structure since it
-            ##  includes a link to the grammar itself.
+
+            ##--Сохранение переменных структуры предположений здесь,
+            ## не сохраняя полную структуру предположений,
+            ## так как она включает ссылку на саму грамматику.
             pickle.dump(self.cur_guess.parse_tree, file)
             pickle.dump(self.cur_guess.first_guess, file)
-            
-    
-    ###############################################################################################################
-    # Restores a session from disk
-    ###############################################################################################################    
+
     def load_session(self):
         with open(self.full_save_file_path, 'rb') as file:
             

@@ -1,36 +1,53 @@
-#!/usr/bin/env python3
 
-#########################################################################
-# Creates lookup tables for ngrams using the specified alphabet
-# Basically this handles the initial counts and telling if 'abcd' shows
-# in a password
-#
-#########################################################################
 
 import sys
-
+import math
 from .smoothing import smooth_grammar, smooth_length
 
-########################################################################
-# Holds all the lookup information and statistics
-# Responsible for performing lookups against it
-########################################################################
+
+
+
+def dist(p1, p2):
+    return math.hypot(p2[0] - p1[0], p2[1] - p1[1])
+
+def decrease_coordinates(pattern, i, j):
+    result = [(x - i, y - j) for x, y in pattern]
+    return tuple(result)
+
+
 class AlphabetLookup:
-    
-    
-    ############################################################################
-    # Basic initialization function
-    #
-    # alphabet = the string alphabet to generate, aka 'abcdefABCDEF123'
-    # ngrams = The length of markov chains.
-    # min_length = The minimum length to store info on
-    # max_length = The maximum length to store info on
-    #
-    # Warning, setting too long of an alphabet and/or too high of ngrams
-    # can cause severe memory/disk space issues.
-    #
-    ############################################################################
-    def __init__(self, alphabet, ngram, min_length = 1, max_length = 20):
+
+    def __init__(self, alphabet, ngram, min_length = 2, max_length = 50):
+        firstRow = "`1234567890-="
+        firstRowShift = "~!@#$%^&*()_+"
+        secondRow = "qwertyuiop[]\\"
+        secondRowShift = "QWERTYUIOP{}|"
+        thirdRow = "asdfghjkl;'"
+        thirdRowShift = "ASDFGHJKL:\""
+        fourthRow = "zxcvbnm,./"
+        fourthRowShift = "ZXCVBNM<>?"
+        allowed_chars = firstRow + firstRowShift + secondRow + secondRowShift + thirdRow + thirdRowShift + fourthRow + fourthRowShift
+        keyboard = [firstRow, secondRow, thirdRow, fourthRow]
+        keyboardShift = [firstRowShift, secondRowShift, thirdRowShift, fourthRowShift]
+        self.keyboardDictionary = {}
+
+        for i in range(0, len(keyboard)):
+            for j in range(0, len(keyboard[i])):
+                if i >= 1:
+                    point = (j + 1, i)
+                else:
+                    point = (j, i)
+                self.keyboardDictionary[keyboard[i][j]] = point
+
+        for i in range(0, len(keyboardShift)):
+            for j in range(0, len(keyboardShift[i])):
+                if i >= 1:
+                    point = (j + 1, i)
+                else:
+                    point = (j, i)
+                self.keyboardDictionary[keyboardShift[i][j]] = point
+        self.keyboardDictionary = self.keyboardDictionary
+        self.patternDictionary = {}
         
         ##--Save input options
         self.alphabet = alphabet
@@ -41,138 +58,142 @@ class AlphabetLookup:
         ##--Min length can't be less than ngram
         if self.min_length < ngram:
             self.min_length = ngram
-             
-        ##--The grammar has the format (example for ngram=4)--##
-        ##   {
-        ##       'aaa': {       //the starting charaters
-        ##           ip_count: 5,    //the number of times they have shown up in the ip (begining)
-        ##           ep_count: 3,    //the number of times they have shown up in the ep (end)
-        ##           cp_count: 100,  //the number of times they have shown up total in passwords (for cp)
-        ##           next_letter:{   //the next letter for cp
-        ##             a:5           //represents the cp 'aaaa' with the count of the times that cp has been seen
-        ##             b:12,         //represents the cp 'aaab'
-        ##             ...,
-        ##           },
-        ##       },
-        ##       ...,
-        ##   }
-        self.grammar = {} 
-                
-        ##--initialize the counters
-        ##--they say how many tokens have been parsed
-        # initial prob counter
+
+
+        {
+            '((0, 0), (0, 0))': {  # Начальный шаблон (IP)
+                'ip_count': 5,  # Количество раз, когда шаблон встречается в начале пароля (IP)
+                'ep_count': 3,  # Количество раз, когда шаблон встречается в конце пароля (EP)
+                'cp_count': 100,  # Общее количество раз, когда шаблон встречается в паролях (CP)
+                'next_letter': {  # Следующий шаблон для CP
+                    '((0, 0), (-1, 1))': 5, # Представляет CP '((0, 0), (0, 0)) -> ((0, 0), (-1, 1))'
+    #                                         с количеством раз, когда CP был увиден
+                    '((0, 0), (1, 1))': 12,  # Представляет CP '((0, 0), (0, 0)) -> ((0, 0), (1, 1))'
+                    ...,
+            },
+        },
+        ...,
+        }
+        {
+            '((0, 0), (0, 0))': {  # Начальные символы (IP)
+                'ip_count': 5,  # Количество раз, когда они встречаются в начале пароля (IP)
+                'ep_count': 3,  # Количество раз, когда они встречаются в конце пароля (EP)
+                'cp_count': 100,  # Общее количество раз, когда они встречаются в паролях (CP)
+                'next_letter': {  # Следующая буква для CP
+                    '((0, 0), (-1, 1))': 5, # Представляет CP '((0, 0), (0, 0)) -> ((0, 0), (-1, 1))' с количеством раз, когда CP был увиден
+                    '((0, 0), (1, 1))': 12,  # Представляет CP '((0, 0), (0, 0)) -> ((0, 0), (1, 1))'
+                    ...,
+            },
+        },
+        ...,
+        }
+
+        self.grammar = {}
+
         self.ip_counter = 0
-        
-        # end probability counter
-        # I know, could combine with ip_counter but may have to discard end prob of a password
-        # due to it containing letters not in the alphabet
+
         self.ep_counter = 0      
-        
-        # length counter
+
         self.ln_counter = 0       
             
-        ##--Intitialize the length table
-        ##--Since we can do a lookup directly based on length, saving this as a simple list vs dictionary
-        self.ln_lookup = [0]* max_length       
-        
+        self.ln_lookup = [0] * max_length
+
         return
-        
-    
-    ######################################################################
-    # Parses the input password and updates the global counts
-    ######################################################################
+
     def parse(self, password):
-        
-        ##--Reject if too short or too long
+
         pw_len = len(password)
-        
         if pw_len < self.min_length or pw_len > self.max_length:
             return
-        
-        ##--Update the length counts
-        ##  List is 0 indexed so subtract -1 from actual length
-        self.ln_lookup[pw_len - 1] += 1
-        self.ln_counter += 1
-        
-        ##--Now loop through the entire password
-        ##  Going to go through every ngram-1 combo so we can grab the end prob as well
-        ##  in this loop. For example if ngram = 3 and the password is 'abcd' we want
-        ##  'ab', 'bc', 'cd'. For the loop it goes 0 to 3, so 0 to pw_len(4) - ngram(3) + 2
-        for i in range(0,pw_len - self.ngram + 2):
-            ##--Grab the ngram-1 section to key off of
-            cur_start_ngram = password[i:i+self.ngram-1]
-            
-            ###--Check if this ngram has been seen before
-            if cur_start_ngram  not in self.grammar:
-                ##--If not, check if it falls within our alphabet
-                if self.is_in_alphabet(cur_start_ngram):
-                    ## Initialize the entry for this items
-                    self.grammar[cur_start_ngram] = {
-                        'ip_count':0,
-                        'ep_count':0,
-                        'cp_count':0,
-                        'next_letter':{},
-                        }
-                ##--Not in alphabet, skip and go on to the next one        
-                else:
-                    continue
-            
-            ##--Just declaring this pointer here to clean up the folloiwng code
-            index = self.grammar[cur_start_ngram]
-            
-            ########
-            ##--Handle if it is the IP
-            ########
-            if i == 0:
-                index['ip_count'] += 1
-                self.ip_counter += 1
-                
-                
-            ########    
-            ##--Handle the CP info 
-            ########            
-            if i != pw_len - (self.ngram -1):
-                end_char = password[i+self.ngram-1]
-                ##--Check if this character has been seen before
-                if end_char not in index['next_letter']:
-                    ##--Check if this char is in the alphabet
-                    if self.is_in_alphabet(end_char):
-                        index['next_letter'][end_char] = 1
-                        index['cp_count'] += 1
-                ##--Have seen this before        
-                else:
-                    index['next_letter'][end_char] += 1
-                    index['cp_count'] += 1
-            
-            #######
-            ##--Handle the EP info
-            #######            
+
+
+        pattern_list = []
+        password = password.strip()
+        password_list_cur = []
+        pointStart = self.keyboardDictionary[password[0]]
+        currentStartX = pointStart[0]
+        currentStartY = pointStart[1]
+        password_list_cur += [pointStart]
+        pos = 1
+        curSumLen = 0
+        for symb in password[1:]:
+            pos += 1
+            point = self.keyboardDictionary[symb]
+            if dist(password_list_cur[-1], point) < 2:
+                password_list_cur += [point]
             else:
-                index['ep_count'] += 1
-                self.ep_counter +=1
-        
-        return
+                if len(password_list_cur) > 1:
+                    basePattern = decrease_coordinates(password_list_cur, currentStartX, currentStartY)
+                    curSumLen += len(basePattern)
+                    pattern_list.append(basePattern)
+                password_list_cur = []
+                currentStartX = point[0]
+                currentStartY = point[1]
+                password_list_cur += [point]
+        if len(password_list_cur) > 1:
+            basePattern = decrease_coordinates(password_list_cur, currentStartX, currentStartY)
+            curSumLen += len(basePattern)
+            pattern_list.append(basePattern)
+
+
+        if curSumLen == len(password):
+            self.ln_lookup[pw_len - 1] += 1
+            self.ln_counter += 1
+            pattern_list_size = len(pattern_list)
+            for i in range(0, pattern_list_size - self.ngram + 2):
+                ##--Grab the ngram-1 section to key off of
+                cur_start_ngram = pattern_list[i:i+self.ngram-1][0]
+
+
+                if cur_start_ngram  not in self.grammar:
+                    if cur_start_ngram in self.alphabet:
+                        self.grammar[cur_start_ngram] = {
+                            'ip_count':0,
+                            'ep_count':0,
+                            'cp_count':0,
+                            'next_letter':{},
+                            }
+                    ##--Not in alphabet, skip and go on to the next one
+                    else:
+                        continue
+
+                ##--Just declaring this pointer here to clean up the folloiwng code
+                index = self.grammar[cur_start_ngram]
+
+                ########
+                ##--Handle if it is the IP
+                ########
+                if i == 0:
+                    index['ip_count'] += 1
+                    self.ip_counter += 1
+
+
+                ########
+                ##--Handle the CP info
+                ########
+                if i != pattern_list_size - (self.ngram -1):
+                    end_pattern = pattern_list[i+self.ngram-1]
+                    ##--Check if this character has been seen before
+                    if end_pattern not in index['next_letter']:
+                        if end_pattern in self.alphabet:
+                            index['next_letter'][end_pattern] = 1
+                            index['cp_count'] += 1
+                    ##--Have seen this before
+                    else:
+                        index['next_letter'][end_pattern] += 1
+                        index['cp_count'] += 1
+
+                #######
+                ##--Handle the EP info
+                #######
+                else:
+                    index['ep_count'] += 1
+                    self.ep_counter +=1
+
+            return
 
         
-    ###########################################################################
-    # Checks if a ngram is present in the alphabet
-    # 
-    # Return Values:
-    # True: if it is
-    # False: if any character in the ngram is not
-    ###########################################################################
-    def is_in_alphabet(self, cur_ngram):
-        for letter in cur_ngram:
-            if letter not in self.alphabet:
-                return False
-        
-        return True
-    
 
-    ##############################################################################
-    # Applies probability smoothing to the grammar and calculates the "levels"
-    # for everything
-    ##############################################################################
     def apply_smoothing(self):
         smooth_length(self.ln_lookup, self.ln_counter)
         smooth_grammar(self.grammar, self.ip_counter, self.ep_counter)

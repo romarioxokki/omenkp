@@ -1,21 +1,10 @@
-#!/usr/bin/env python3
 
-#########################################################################
-# Contains common IO functions that I use when parsing password and
-# dictionary files. Goal is to have one library shared across multiple
-# projects since a lot of those projects have to do common things like
-# read in a set of previously cracked passwords
-#
-#########################################################################
 
 import os
 import sys
 import errno
 import codecs
 
-##############################################################################
-# Create a directory if one does not already exist
-##############################################################################
 def make_sure_path_exists(path):
     try:
         os.makedirs(path)
@@ -24,18 +13,6 @@ def make_sure_path_exists(path):
             raise
             
 
-#################################################################################################
-# Used for autodetecting file encoding of the training password set
-#
-# Returns True if an encoding can be determined
-# Returns False if a file error occurs
-#
-# Requires the python package chardet to be installed
-# pip3 install chardet
-# You can also get it from https://github.com/chardet/chardet
-# I'm keeping the declarations for the chardet package local to this file so people can run this
-# tool without installing it if they don't want to use this feature
-##################################################################################################
 def detect_file_encoding(training_file, file_encoding, max_passwords = 10000, default = 'utf-8'):
     print()
     print("Attempting to autodetect file encoding of the file: " + str(training_file), file=sys.stderr)

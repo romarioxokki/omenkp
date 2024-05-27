@@ -101,21 +101,17 @@ def smooth_length(ln_lookup, ln_counter, max_level = 10):
 # Note, if total count is 0 will intentionally raise a divide by 0 error
 ########################################################################################################            
 def _calc_level(base_count, total_count, level_adjust_factor, max_level = 10):
-    
-    ##--Calculate the probi values
+
     probi = base_count / total_count
     probi *= level_adjust_factor
     probi += 0.00000000001
-    
-    ##--Now calculate the level
+
     level = math.floor(-1 * math.log(probi))
-    
-    ##--Perform sanity checking of the level to get it to fall
-    ##  within the appropriate bounds
+
     if level > max_level:
         level = max_level
-    ##--Sometimes this can give an item -1 or -2 vs the base 0 so correct that
+
     elif level < 0:
         level = 0
 
-    return level        
+    return level

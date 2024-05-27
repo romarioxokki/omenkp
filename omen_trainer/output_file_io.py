@@ -1,6 +1,3 @@
-#############################################################################
-# Contains OMEN specific file IO functions to save training data to disk
-#############################################################################
 
 import sys
 import os
@@ -9,10 +6,6 @@ import codecs
 
 from .common_file_io import make_sure_path_exists
 
-#################################################################################
-# Main function called to save all of the data to disk
-#
-#################################################################################
 def save_rules_to_disk(omen_trainer, save_info, config_info):
     
     encoding = config_info['training_settings']['alphabet_encoding']
@@ -35,7 +28,7 @@ def save_rules_to_disk(omen_trainer, save_info, config_info):
         with codecs.open(full_path, 'w', encoding=encoding) as file:
             ##--Loop through the top (ngram-1) list that has IP
             for key, data in omen_trainer.grammar.items():
-                file.write(str(data['ip_level'])+ "\t" + key + "\n")             
+                file.write(str(data['ip_level'])+ "\t" + '->'.join(map(str, key)) + "\n")
     ##--Print out where the error occured, but then re-raise it for the calling function
     ##--to inform the user that the rules will not be saved
     except:
@@ -49,7 +42,7 @@ def save_rules_to_disk(omen_trainer, save_info, config_info):
         with codecs.open(full_path, 'w', encoding=encoding) as file:
             ##--Loop through the top (ngram-1) list that has IP
             for key, data in omen_trainer.grammar.items():
-                file.write(str(data['ep_level'])+ "\t" + key + "\n")    
+                file.write(str(data['ep_level'])+ "\t" + '->'.join(map(str, key)) + "\n")
     ##--Print out where the error occured, but then re-raise it for the calling function
     ##--to inform the user that the rules will not be saved
     except:
@@ -65,7 +58,7 @@ def save_rules_to_disk(omen_trainer, save_info, config_info):
             for key, data in omen_trainer.grammar.items():
                 ##--Loop through all of the final letter transitions
                 for last_letter, level in data['next_letter'].items():
-                    file.write(str(level[0]) + "\t" + key + last_letter +  "\n")                    
+                    file.write(str(level[0]) + "\t" + '->'.join(map(str, key)) + "\t" + '->'.join(map(str, last_letter)) +  "\n")
     ##--Print out where the error occured, but then re-raise it for the calling function
     ##--to inform the user that the rules will not be saved
     except:
@@ -141,7 +134,7 @@ def _save_alphabet(file_name, directory, alphabet, encoding):
         full_path = os.path.join(directory, file_name) 
         with codecs.open(full_path, 'w', encoding=encoding) as alphafile:
             for item in alphabet:
-                alphafile.write(item+'\n')
+                alphafile.write('->'.join(map(str, item)) +'\n')
     except IOError as error:
         print (error)
         print ("Error opening file " + str(full_path))

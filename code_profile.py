@@ -1,10 +1,6 @@
 import enumNG
 import cProfile
 
-
-##################################################################
-# Main function
-##################################################################
 def main():
     cProfile.runctx("enumNG.main()", globals(), locals(), sort ='tottime')
 

@@ -9,12 +9,6 @@ import sys
 import os 
 
 
-#########################################################################################################
-# Will attempt to create a guess for a particular length + IP + target level
-# Based on OMEN
-#
-# Seperating this out to clean up the markov_cracker code
-#########################################################################################################
 class GuessStructure:
     
     ############################################################################################
@@ -85,10 +79,10 @@ class GuessStructure:
         ##--The number of levels we have to fill for the final password from this depth
         req_level = element[1] + self.parse_tree[-1][1]           
         
-        #print("element: " + str(element))
-        #print("parse tree: " + str(self.parse_tree))
-        #print("req_level: " + str(req_level))
-        #input("debug")        
+        # print("element: " + str(element))
+        # print("parse tree: " + str(self.parse_tree))
+        # print("req_level: " + str(req_level))
+        # input("debug")
             
         ##--Now loop through all the possible items at this depth
         while self.parse_tree:
@@ -149,11 +143,13 @@ class GuessStructure:
     def _format_guess(self):
 
         guess = self.ip
+        separation_tuple = ((5, 5),)
         for item in self.parse_tree:
-            guess += self.cp[item[0]][item[1]][item[2]]        
-        
+            guess += separation_tuple
+            guess += self.cp[item[0]][item[1]][item[2]]
+
         ##--This seems slower
-        #guess = ''.join([self.ip] + [self.cp[item[0]][item[1]][item[2]] for item in self.parse_tree])       
+        #guess = '!'.join([self.ip] + [self.cp[item[0]][item[1]][item[2]] for item in self.parse_tree])
         
         return guess
             
